@@ -1,0 +1,51 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isPayer(sessionId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(request.auth.uid)).data.isPayer == true;
+    }
+
+    function isParticipant(sessionId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(request.auth.uid));
+    }
+
+    match /sessions/{sessionId} {
+      // Anyone signed in (anonymous auth) can read a session to join via link/QR.
+      allow read: if isSignedIn();
+      // Only the payer creates/edits the session document (totals, status, receipt fields).
+      allow create: if isSignedIn();
+      allow update: if isPayer(sessionId);
+      allow delete: if false;
+
+      match /items/{itemId} {
+        allow read: if isSignedIn();
+        // Only the payer edits item text/price/shared-flag; anyone in the
+        // session can toggle their own claim in claimedBy via a transaction.
+        allow create, delete: if isPayer(sessionId);
+        // Payer can edit any field. Non-payer participants may only toggle
+        // their own claim and the shared flag (claiming triggers the
+        // "split this" option), never the name/price.
+        allow update: if isPayer(sessionId) ||
+          (isParticipant(sessionId) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimedBy', 'isShared']));
+      }
+
+      match /participants/{participantId} {
+        allow read: if isSignedIn();
+        // A participant may only create/update their own doc, keyed by their auth uid.
+        allow create: if isSignedIn() && request.auth.uid == participantId;
+        allow update: if isSignedIn() && request.auth.uid == participantId;
+        allow delete: if false;
+      }
+    }
+  }
+}

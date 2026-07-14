@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Receipt images are stored at receipts/{sessionId}/{fileName}.
+    // Any signed-in (anonymous) user can read one to view/join a session;
+    // writes are allowed for any signed-in user since the session doc
+    // itself doesn't exist yet at upload time (it's created right after).
+    match /receipts/{sessionId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+  }
+}
