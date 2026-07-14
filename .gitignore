@@ -44,3 +44,4 @@ next-env.d.ts
 # fetched by `npm install` (postinstall runs scripts/fetch-tessdata.mjs)
 /tessdata/
 .DS_Store
+.DS_Store
